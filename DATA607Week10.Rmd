@@ -1,0 +1,140 @@
+---
+title: "Sentiment Analysis of COVID-19 Tweets"
+output:
+  pdf_document:
+    latex_engine: xelatex
+date: "2024-11-11"
+---
+Introduction: 
+The purpose of this assignment is to conduct sentiment analysis. I decided to analyze a collection of tweets to explore and quantify the emotional tone of social media interactions during COVID-19. Sentiment analysis is a natural language processing technique used to classify text by identifying and categorizing emotions or attitudes conveyed within the language. I will beapplying different sentiment lexicons — namely, AFINN, Bing, and NRC. 
+
+The AFINN lexicon assigns sentiment scores, allowing a calculation of cumulative sentiment per tweet, while the Bing lexicon categorizes words simply as "positive" or "negative." The NRC lexicon provides a broader emotional classification, encompassing various sentiment categories.
+
+```{r}
+library(tidytext)
+
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+```
+
+
+```{r}
+# Load Libraries 
+library(rtweet)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+
+```
+
+```{r}
+# Load the dataset
+tweets <- read.csv("/Users/leslietavarez/Downloads/covid19_tweets.csv")
+
+# Preview the data
+head(tweets)
+```
+```{r}
+# Check structure and add unique IDs to each tweet row
+tweets_clean <- tweets %>%
+  mutate(tweet_id = row_number()) %>% # Creates a unique ID for each tweet row
+ select(tweet_id, text)
+
+# Tokenize text by individual tweet and remove stop words
+tweets_words <- tweets_clean %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words, by = "word")
+
+head(tweets_clean)
+```
+The histogram from the AFINN lexicon reveals a nearly symmetric distribution around zero, indicating a balanced mix of positive and negative sentiment in the COVID-19 tweets.
+
+```{r}
+# Perform sentiment analysis using AFINN lexicon
+tweets_sentiment <- tweets_words %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(tweet_id) %>%  # assuming 'tweet_id' is a unique identifier for each tweet
+  summarize(sentiment_score = sum(value, na.rm = TRUE))
+
+#View results
+tweets_sentiment
+
+# Histogram of sentiment scores
+ggplot(tweets_sentiment, aes(x = sentiment_score)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Sentiment Scores",
+       x = "Sentiment Score",
+       y = "Count of Tweets") +
+  theme_minimal()
+```
+The positive sentiment is surprisingly strong, with more positive than negative tweets overall. However, there’s a noticeable mix of emotions—anticipation, fear, sadness, and trust all show up frequently. It’s interesting to see so many positive tweets, as I expected more negativity considering how hard the pandemic was for many, with people losing loved ones and facing uncertainty. This mix of sentiments really captures the complex emotions people felt during that time.
+
+```{r}
+# Perform sentiment analysis using NRC lexicon
+tweets_sentiment_nrc <- tweets_words %>%
+  inner_join(get_sentiments("nrc"), by = "word") %>%
+  group_by(tweet_id, sentiment) %>%  # Group by tweet and sentiment type
+  summarize(sentiment_count = n(), .groups = 'drop')  # Count occurrences of each sentiment per tweet
+
+# View the results
+head(tweets_sentiment_nrc)
+tweets_sentiment_nrc
+
+# Heatmap of sentiment counts
+ggplot(tweets_sentiment_nrc, aes(x = factor(tweet_id), y = sentiment, fill = sentiment_count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(title = "Heatmap of Sentiments per Tweet",
+       x = "Tweet ID",
+       y = "Sentiment") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Summarize total counts per sentiment
+sentiment_summary <- tweets_sentiment_nrc %>%
+  group_by(sentiment) %>%
+  summarize(total_count = sum(sentiment_count))
+
+# Bar plot
+ggplot(sentiment_summary, aes(x = sentiment, y = total_count, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Sentiment Counts Across All Tweets",
+       x = "Sentiment",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The Bing lexicon analysis reveals a predominance of negative sentiment over positive sentiment in the COVID-19 tweets.This reflects the challenging aspects of the pandemic.However, the presence of positive sentiment shows that some tweets conveyed hope or moments of appreciation.
+
+
+```{r}
+# Perform sentiment analysis using the Bing lexicon
+tweets_sentiment_bing <- tweets_words %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%  # Join with Bing lexicon
+  group_by(tweet_id, sentiment) %>%                    # Group by tweet and sentiment type
+  summarize(sentiment_count = n(), .groups = 'drop')   # Count positive/negative words for each tweet
+
+# View the results
+head(tweets_sentiment_bing)
+
+# Summarize total positive and negative counts
+sentiment_summary <- tweets_sentiment_bing %>%
+  group_by(sentiment) %>%
+  summarize(total_count = sum(sentiment_count))
+
+# Bar plot for total positive vs. negative sentiment
+ggplot(sentiment_summary, aes(x = sentiment, y = total_count, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("positive" = "skyblue", "negative" = "salmon")) +
+  labs(title = "Total Positive vs. Negative Sentiments",
+       x = "Sentiment",
+       y = "Total Count of Words") +
+  theme_minimal()
+
+```
+Conclusion: 
+
+The Bing lexicon appears more negative than others because it classifies words like "quarantine" or "isolation" as inherently negative, even though they might be neutral in context. Bing’s binary approach exaggerates negativity, especially in difficult topics like COVID-19. In contrast, NRC captures a broader range of emotions, leading to a more balanced distribution, while AFINN’s numerical scoring system allows for more nuance, offsetting mild negativity with extreme positivity for a more balanced sentiment analysis.
